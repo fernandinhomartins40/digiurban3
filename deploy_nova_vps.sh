@@ -10,7 +10,7 @@
 VPS_IP="72.60.10.112"
 APP_NAME="digiurban2"
 DOCKER_IMAGE="digiurban2:latest"
-DOMAIN="digiurban.com.br"
+# Removido DOMAIN - acesso direto via IP:porta
 
 echo "====================================================="
 echo "DIGIURBAN2 - DEPLOY NA NOVA VPS $VPS_IP"
@@ -63,20 +63,13 @@ else
     echo "Nginx já instalado"
 fi
 
-# 5. Instalar Certbot para SSL
-echo "[5/10] Instalando Certbot..."
-if ! command -v certbot &> /dev/null; then
-    sudo apt install certbot python3-certbot-nginx -y
-    check_error "Falha ao instalar Certbot"
-else
-    echo "Certbot já instalado"
-fi
+# 5. Pular instalação do Certbot (não precisamos de SSL para IP)
+echo "[5/10] Pulando Certbot - acesso via IP:porta..."
 
 # 6. Configurar firewall
 echo "[6/10] Configurando firewall..."
 sudo ufw allow ssh
-sudo ufw allow 80
-sudo ufw allow 443
+sudo ufw allow 3010
 sudo ufw --force enable
 
 # 7. Criar diretório da aplicação
@@ -96,7 +89,7 @@ services:
     container_name: digiurban2-app
     restart: unless-stopped
     ports:
-      - "3010:80"
+      - "8080:80"
     environment:
       - NODE_ENV=production
     volumes:
@@ -109,40 +102,13 @@ networks:
     driver: bridge
 EOF
 
-# 9. Configurar Nginx como proxy reverso
+# 9. Configurar Nginx para acesso direto via IP:porta
 echo "[9/10] Configurando Nginx..."
-sudo tee /etc/nginx/sites-available/$DOMAIN > /dev/null << 'EOF'
-# Redirect HTTP to HTTPS
+sudo tee /etc/nginx/sites-available/digiurban-ip > /dev/null << 'EOF'
+# HTTP Configuration - Acesso via IP:porta
 server {
-    listen 80;
-    server_name digiurban.com.br www.digiurban.com.br;
-    
-    # Let's Encrypt challenge
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-    
-    # Redirect all HTTP to HTTPS
-    location / {
-        return 301 https://$server_name$request_uri;
-    }
-}
-
-# HTTPS Configuration
-server {
-    listen 443 ssl http2;
-    server_name digiurban.com.br www.digiurban.com.br;
-    
-    # SSL Configuration (será configurado pelo Certbot)
-    # ssl_certificate /etc/letsencrypt/live/digiurban.com.br/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/digiurban.com.br/privkey.pem;
-    
-    # SSL Security Settings
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
+    listen 3010;
+    server_name 72.60.10.112;
     
     # Security Headers
     add_header X-Frame-Options "SAMEORIGIN" always;
@@ -150,32 +116,50 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "no-referrer-when-downgrade" always;
     add_header Content-Security-Policy "default-src 'self' http: https: ws: wss: data: blob: 'unsafe-inline'; frame-ancestors 'self';" always;
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    
+    # Configuração de proxy para React App
+    client_max_body_size 50M;
+    proxy_buffer_size 64k;
+    proxy_buffers 32 64k;
+    proxy_busy_buffers_size 128k;
+    
+    # Timeout settings
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 60s;
+    proxy_read_timeout 60s;
     
     # Proxy para container Docker DigiUrban2
     location / {
-        proxy_pass http://127.0.0.1:3010;
+        proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto http;
         proxy_cache_bypass $http_upgrade;
         proxy_read_timeout 86400;
         proxy_connect_timeout 60;
         proxy_send_timeout 60;
     }
     
+    # Health check endpoint
+    location /health {
+        access_log off;
+        return 200 "DigiUrban React App - HTTP - IP:3010";
+        add_header Content-Type text/plain;
+    }
+    
     # Logs
-    access_log /var/log/nginx/digiurban.com.br.access.log;
-    error_log /var/log/nginx/digiurban.com.br.error.log;
+    access_log /var/log/nginx/digiurban-ip.access.log;
+    error_log /var/log/nginx/digiurban-ip.error.log;
 }
 EOF
 
-# Habilitar site
-sudo ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
+# Remover configuração padrão do nginx e habilitar nossa configuração
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo ln -sf /etc/nginx/sites-available/digiurban-ip /etc/nginx/sites-enabled/
 sudo nginx -t
 check_error "Erro na configuração do Nginx"
 sudo systemctl reload nginx
@@ -188,11 +172,11 @@ echo "====================================================="
 echo "1. Fazer upload dos arquivos da aplicação para /opt/$APP_NAME"
 echo "2. Configurar variáveis de ambiente (.env)"
 echo "3. Executar: docker-compose up -d --build"
-echo "4. Configurar SSL: sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN"
-echo "5. Verificar se o domínio está apontando para $VPS_IP"
+echo "4. Acessar aplicação: http://$VPS_IP:3010"
 echo ""
 echo "Comandos úteis:"
 echo "- Ver logs: docker-compose logs -f"
 echo "- Rebuild: docker-compose down && docker-compose up -d --build"
 echo "- Status: docker-compose ps"
+echo "- Testar nginx: curl -I http://$VPS_IP:3010/health"
 echo "====================================================="
