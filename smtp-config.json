@@ -1,0 +1,15 @@
+{
+  "host": "localhost",
+  "port": 587,
+  "secure": false,
+  "auth": {
+    "user": "noreply@digiurban.local",
+    "pass": "DigiUrban2025!@#$"
+  },
+  "pool": true,
+  "maxConnections": 5,
+  "maxMessages": 100,
+  "tls": {
+    "rejectUnauthorized": false
+  }
+}

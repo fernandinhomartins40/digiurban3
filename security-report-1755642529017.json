@@ -1,0 +1,40 @@
+{
+  "timestamp": "2025-08-19T22:28:49.017Z",
+  "summary": {
+    "critical_issues": 0,
+    "warnings": 0,
+    "passed_checks": 19,
+    "total_checks": 19
+  },
+  "critical_issues": [],
+  "warnings": [],
+  "passed_checks": [
+    "✅ Arquivo .gitignore: .gitignore",
+    "✅ Cliente Supabase: src/integrations/supabase/client.ts",
+    "✅ Cliente Admin Supabase: src/lib/supabaseAdmin.ts",
+    "✅ .gitignore inclui: .env",
+    "✅ .gitignore inclui: .env.local",
+    "✅ .gitignore inclui: .env.production",
+    "✅ .gitignore inclui: *.key",
+    "✅ .gitignore inclui: *.pem",
+    "✅ .gitignore inclui: credentials.json",
+    "✅ .gitignore inclui: secrets/",
+    "✅ .gitignore inclui: private/",
+    "✅ Arquivo .env não está no repositório",
+    "✅ Arquivo .env.example: Nenhum segredo exposto detectado",
+    "✅ .env.example existe e não contém segredos",
+    "✅ Código fonte: src/integrations/supabase/client.ts: Nenhum segredo exposto detectado",
+    "✅ Código fonte: src/lib/supabaseAdmin.ts: Nenhum segredo exposto detectado",
+    "✅ Código fonte: src/lib/auth.ts: Nenhum segredo exposto detectado",
+    "✅ Código fonte: src/hooks/useAuthV2.tsx: Nenhum segredo exposto detectado",
+    "✅ package.json verificado"
+  ],
+  "recommendations": [
+    "Remover arquivo .env do repositório se presente",
+    "Regenerar todas as chaves de API expostas",
+    "Implementar rotação automática de tokens",
+    "Configurar rate limiting no backend",
+    "Implementar monitoramento de segurança",
+    "Executar audit npm/yarn regularmente"
+  ]
+}

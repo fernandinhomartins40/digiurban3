@@ -1,0 +1,200 @@
+{
+  "total_tables": 80,
+  "extraction_date": "2025-08-18T22:04:31.292Z",
+  "modules": {
+    "Sistema Core": [
+      "anexos",
+      "audit_logs",
+      "notificacoes",
+      "protocolos",
+      "protocolos_historico",
+      "secretarias",
+      "tenants",
+      "user_activities",
+      "user_profiles",
+      "user_sessions"
+    ],
+    "Agricultura": [
+      "agricultura_ater",
+      "agricultura_distribuicao",
+      "agricultura_insumos",
+      "agricultura_produtores",
+      "agricultura_programas"
+    ],
+    "Assistência Social": [
+      "assistencia_atendimentos",
+      "assistencia_familias",
+      "assistencia_unidades"
+    ],
+    "Cultura": [
+      "cultura_espacos",
+      "cultura_eventos",
+      "cultura_grupos",
+      "cultura_oficinas",
+      "cultura_projetos"
+    ],
+    "Educação": [
+      "educacao_alunos",
+      "educacao_escolas",
+      "educacao_matriculas",
+      "educacao_profissionais",
+      "educacao_turmas"
+    ],
+    "Esportes": [
+      "esportes_atletas",
+      "esportes_competicoes",
+      "esportes_equipes",
+      "esportes_escolinhas",
+      "esportes_infraestrutura"
+    ],
+    "Gabinete": [
+      "gabinete_agenda",
+      "gabinete_atendimentos",
+      "gabinete_audiencias",
+      "gabinete_indicadores",
+      "gabinete_projetos_estrategicos"
+    ],
+    "Habitação": [
+      "habitacao_familias",
+      "habitacao_programas",
+      "habitacao_regularizacao",
+      "habitacao_selecao",
+      "habitacao_unidades"
+    ],
+    "Meio Ambiente": [
+      "meio_ambiente_areas_protegidas",
+      "meio_ambiente_denuncias",
+      "meio_ambiente_educacao",
+      "meio_ambiente_licenciamento",
+      "meio_ambiente_monitoramento"
+    ],
+    "Obras": [
+      "obras_acompanhamento",
+      "obras_projetos"
+    ],
+    "Planejamento": [
+      "planejamento_alvaras",
+      "planejamento_consultas_publicas",
+      "planejamento_projetos",
+      "planejamento_vistorias",
+      "planejamento_zoneamento"
+    ],
+    "Saúde": [
+      "saude_agendamentos",
+      "saude_campanhas",
+      "saude_medicamentos",
+      "saude_pacientes",
+      "saude_profissionais",
+      "saude_unidades"
+    ],
+    "Segurança": [
+      "seguranca_guardas",
+      "seguranca_ocorrencias"
+    ],
+    "Serviços Urbanos": [
+      "servicos_areas_verdes",
+      "servicos_coleta_especial",
+      "servicos_iluminacao",
+      "servicos_limpeza",
+      "servicos_problemas"
+    ],
+    "Turismo": [
+      "turismo_estabelecimentos",
+      "turismo_eventos",
+      "turismo_pontos",
+      "turismo_roteiros",
+      "turismo_visitantes"
+    ],
+    "Functions": [
+      "gerar_numero_protocolo",
+      "get_current_user_tenant",
+      "get_current_user_type",
+      "get_user_permissions",
+      "is_super_admin",
+      "log_audit_action",
+      "log_login_attempt"
+    ]
+  },
+  "all_tables": [
+    "agricultura_ater",
+    "agricultura_distribuicao",
+    "agricultura_insumos",
+    "agricultura_produtores",
+    "agricultura_programas",
+    "anexos",
+    "assistencia_atendimentos",
+    "assistencia_familias",
+    "assistencia_unidades",
+    "audit_logs",
+    "cultura_espacos",
+    "cultura_eventos",
+    "cultura_grupos",
+    "cultura_oficinas",
+    "cultura_projetos",
+    "educacao_alunos",
+    "educacao_escolas",
+    "educacao_matriculas",
+    "educacao_profissionais",
+    "educacao_turmas",
+    "esportes_atletas",
+    "esportes_competicoes",
+    "esportes_equipes",
+    "esportes_escolinhas",
+    "esportes_infraestrutura",
+    "gabinete_agenda",
+    "gabinete_atendimentos",
+    "gabinete_audiencias",
+    "gabinete_indicadores",
+    "gabinete_projetos_estrategicos",
+    "gerar_numero_protocolo",
+    "get_current_user_tenant",
+    "get_current_user_type",
+    "get_user_permissions",
+    "habitacao_familias",
+    "habitacao_programas",
+    "habitacao_regularizacao",
+    "habitacao_selecao",
+    "habitacao_unidades",
+    "is_super_admin",
+    "log_audit_action",
+    "log_login_attempt",
+    "meio_ambiente_areas_protegidas",
+    "meio_ambiente_denuncias",
+    "meio_ambiente_educacao",
+    "meio_ambiente_licenciamento",
+    "meio_ambiente_monitoramento",
+    "notificacoes",
+    "obras_acompanhamento",
+    "obras_projetos",
+    "planejamento_alvaras",
+    "planejamento_consultas_publicas",
+    "planejamento_projetos",
+    "planejamento_vistorias",
+    "planejamento_zoneamento",
+    "protocolos",
+    "protocolos_historico",
+    "saude_agendamentos",
+    "saude_campanhas",
+    "saude_medicamentos",
+    "saude_pacientes",
+    "saude_profissionais",
+    "saude_unidades",
+    "secretarias",
+    "seguranca_guardas",
+    "seguranca_ocorrencias",
+    "servicos_areas_verdes",
+    "servicos_coleta_especial",
+    "servicos_iluminacao",
+    "servicos_limpeza",
+    "servicos_problemas",
+    "tenants",
+    "turismo_estabelecimentos",
+    "turismo_eventos",
+    "turismo_pontos",
+    "turismo_roteiros",
+    "turismo_visitantes",
+    "user_activities",
+    "user_profiles",
+    "user_sessions"
+  ]
+}

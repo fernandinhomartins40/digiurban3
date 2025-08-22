@@ -1,0 +1,27 @@
+{
+  "metadata": {
+    "project_ref": "warbeochfoabfptvvtpu",
+    "export_format": "json",
+    "filter_applied": "all",
+    "generated_at": "2025-08-18T21:56:46.818Z"
+  },
+  "statistics": {
+    "total_tables": 0,
+    "total_policies": 0,
+    "total_functions": 0,
+    "total_triggers": 0,
+    "total_indexes": 0,
+    "total_buckets": 0,
+    "tables_with_rls": 0,
+    "export_timestamp": "2025-08-18T21:56:46.818Z"
+  },
+  "schema": {
+    "tables": [],
+    "policies": [],
+    "functions": [],
+    "triggers": [],
+    "indexes": [],
+    "buckets": [],
+    "storage_policies": []
+  }
+}

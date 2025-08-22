@@ -1,0 +1,40 @@
+{
+  "audit_date": "2025-08-18T22:06:38.794Z",
+  "rpc_functions": {
+    "total": 16,
+    "existing": 4,
+    "missing": 12,
+    "existing_list": [
+      "gerar_numero_protocolo",
+      "get_user_permissions",
+      "log_audit_action",
+      "log_login_attempt"
+    ],
+    "missing_list": [
+      "is_password_expired",
+      "confirm_password_change",
+      "create_user_with_temp_password",
+      "get_creatable_user_types",
+      "can_create_user_type",
+      "force_password_change",
+      "pontos_proximos",
+      "get_monthly_revenue_metrics",
+      "increment_beneficiarios",
+      "incrementar_participantes_consulta",
+      "run_sql_query",
+      "test_rls_policies_v2"
+    ]
+  },
+  "edge_functions": {
+    "total": 2,
+    "existing": 2,
+    "missing": 0,
+    "existing_list": [
+      "export-schema",
+      "seed-test-users"
+    ],
+    "missing_list": []
+  },
+  "total_missing": 12,
+  "status": "NEEDS_FUNCTIONS"
+}

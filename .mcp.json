@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ultrabase": {
+      "command": "npx",
+      "args": ["-y", "@ultrabase/mcp-server"],
+      "env": {
+        "ULTRABASE_API_URL": "https://ultrabase.com.br/mcp-api",
+        "ULTRABASE_API_KEY": "ultrabase_c813d57ac47d8d30_b0fae0f8f0dc783b2f69605bf4b239d33ea7d438bac69e6d75a1b80c9dd7d283"
+      }
+    }
+  }
+}

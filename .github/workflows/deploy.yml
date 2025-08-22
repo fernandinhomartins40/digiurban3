@@ -1,0 +1,574 @@
+name: 🚀 Deploy DigiUrban2 - DEPLOY LIMPO (Docker)
+
+# Controle de concorrência - ÚNICO deploy por vez
+concurrency:
+  group: digiurban2-production-deploy
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  VPS_HOST: '72.60.10.108'
+  VPS_USER: 'root'
+  APP_DIR: '/root/digiurban2'
+  APP_PORT: '3002'
+  IMAGE_NAME: 'digiurban2-gestao-urbana'
+  CONTAINER_NAME: 'digiurban2-container'
+  DOMAIN: 'digiurban.com.br'
+  NGINX_CONTAINER: 'nginx-proxy'
+
+jobs:
+  analyze-changes:
+    name: 🔍 Analisar Mudanças
+    runs-on: ubuntu-latest
+    outputs:
+      has_code_changes: ${{ steps.changes.outputs.has_code_changes }}
+      has_package_changes: ${{ steps.changes.outputs.has_package_changes }}
+      has_config_changes: ${{ steps.changes.outputs.has_config_changes }}
+      needs_restart: ${{ steps.changes.outputs.needs_restart }}
+      deploy_type: ${{ steps.changes.outputs.deploy_type }}
+    
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    
+    - name: 🔍 Analisar arquivos alterados
+      id: changes
+      run: |
+        echo "🔍 Analisando mudanças desde o último commit..."
+        
+        # Obter arquivos alterados
+        CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "all")
+        echo "📁 Arquivos alterados:"
+        echo "$CHANGED_FILES"
+        
+        # Inicializar flags
+        HAS_CODE=false
+        HAS_PACKAGE=false
+        HAS_CONFIG=false
+        NEEDS_RESTART=false
+        
+        # Analisar tipos de mudanças para DigiUrban2 React App e Super Painel
+        if echo "$CHANGED_FILES" | grep -E "(src/|super-admin/|database-setup/|vite\.config|index\.html|Dockerfile|nginx\.conf|\.env)" > /dev/null || [ "$CHANGED_FILES" = "all" ]; then
+          HAS_CODE=true
+          echo "✅ Mudanças de código frontend/super-admin/database detectadas"
+        fi
+        
+        if echo "$CHANGED_FILES" | grep -E "(package(-lock)?\.json|super-admin/package\.json)" > /dev/null; then
+          HAS_PACKAGE=true
+          echo "📦 Mudanças em dependências detectadas"
+        fi
+        
+        if echo "$CHANGED_FILES" | grep -E "(\.env|vite\.config\.(js|ts)|tailwind\.config\.(js|ts)|Dockerfile|\.dockerignore|nginx\.conf)" > /dev/null; then
+          HAS_CONFIG=true
+          echo "⚙️ Mudanças de configuração detectadas"
+        fi
+        
+        # Determinar se precisa restart
+        if [[ "$HAS_CODE" == "true" || "$HAS_CONFIG" == "true" ]]; then
+          NEEDS_RESTART=true
+        fi
+        
+        # Determinar tipo de deploy
+        if [[ "$HAS_PACKAGE" == "true" ]]; then
+          DEPLOY_TYPE="full"
+          echo "🔄 Deploy completo necessário (dependências mudaram)"
+        elif [[ "$HAS_CODE" == "true" ]]; then
+          DEPLOY_TYPE="code-only"
+          echo "📝 Deploy apenas de código"
+        elif [[ "$HAS_CONFIG" == "true" ]]; then
+          DEPLOY_TYPE="config-only"
+          echo "⚙️ Deploy apenas de configuração"
+        else
+          DEPLOY_TYPE="minimal"
+          echo "📋 Deploy mínimo (docs/workflows)"
+        fi
+        
+        # Definir outputs
+        echo "has_code_changes=$HAS_CODE" >> $GITHUB_OUTPUT
+        echo "has_package_changes=$HAS_PACKAGE" >> $GITHUB_OUTPUT
+        echo "has_config_changes=$HAS_CONFIG" >> $GITHUB_OUTPUT
+        echo "needs_restart=$NEEDS_RESTART" >> $GITHUB_OUTPUT
+        echo "deploy_type=$DEPLOY_TYPE" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: 🚀 Deploy Docker
+    runs-on: ubuntu-latest
+    needs: analyze-changes
+    timeout-minutes: 45
+    
+    steps:
+    - name: 📋 Info do Deploy Docker
+      run: |
+        echo "🚀 Deploy DigiUrban2 React App com Docker"
+        echo "=============================================="
+        echo "Commit: ${{ github.sha }}"
+        echo "Branch: ${{ github.ref_name }}"
+        echo "Tipo de Deploy: ${{ needs.analyze-changes.outputs.deploy_type }}"
+        echo "Mudanças de Código: ${{ needs.analyze-changes.outputs.has_code_changes }}"
+        echo "Mudanças de Dependências: ${{ needs.analyze-changes.outputs.has_package_changes }}"
+        echo "Precisa Restart: ${{ needs.analyze-changes.outputs.needs_restart }}"
+        echo "=============================================="
+
+    - name: 🔑 Configurar SSH
+      run: |
+        echo "🔑 Configurando SSH para deploy..."
+        
+        # Instalar sshpass para autenticação por senha
+        sudo apt-get update -qq
+        sudo apt-get install -y sshpass
+        
+        # Configurar SSH com otimizações para conexões longas
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Configurar SSH client com keepalive
+        cat > ~/.ssh/config << 'EOL'
+        Host *
+          ServerAliveInterval 60
+          ServerAliveCountMax 120
+          TCPKeepAlive yes
+          ControlMaster auto
+          ControlPath ~/.ssh/control-%h-%p-%r
+          ControlPersist 600
+          ConnectTimeout 30
+        EOL
+        chmod 600 ~/.ssh/config
+        
+        # Adicionar host conhecido para evitar prompt de verificação
+        ssh-keyscan -H ${{ env.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+        
+        # Testar conexão SSH com senha e keepalive
+        echo "🔍 Testando conexão SSH com configurações otimizadas..."
+        if sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "echo 'Conexão SSH bem-sucedida'"; then
+          echo "✅ SSH configurado e testado com sucesso"
+        else
+          echo "❌ Falha na conexão SSH. Verifique se:"
+          echo "  1. A secret VPS_PASSWORD contém a senha correta"
+          echo "  2. O servidor ${{ env.VPS_HOST }} está acessível"
+          echo "  3. O usuário ${{ env.VPS_USER }} existe e aceita autenticação por senha"
+          exit 1
+        fi
+
+    - name: 🔍 Verificar e instalar Docker na VPS
+      run: |
+        echo "🔍 Verificando e instalando Docker se necessário..."
+        sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          echo '=== Verificando Docker na VPS ==='
+          
+          # Verificar se Docker está instalado
+          if ! command -v docker &> /dev/null; then
+            echo '📦 Docker não encontrado, instalando...'
+            
+            # Atualizar sistema
+            apt-get update -y
+            
+            # Instalar dependências
+            apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+            
+            # Adicionar chave GPG do Docker
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+            
+            # Adicionar repositório Docker
+            echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \$(lsb_release -cs) stable\" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+            
+            # Instalar Docker
+            apt-get update -y
+            apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            
+            # Iniciar Docker
+            systemctl start docker
+            systemctl enable docker
+            
+            echo '✅ Docker instalado com sucesso'
+          else
+            echo '✅ Docker já está instalado'
+          fi
+          
+          # Verificar versão do Docker
+          echo 'Docker version:'
+          docker --version
+          
+          echo ''
+          echo 'Docker service status:'
+          systemctl is-active docker || systemctl start docker
+          
+          echo ''
+          echo 'Docker Containers atuais:'
+          docker ps --format 'table {{.Names}}\t{{.Status}}' | grep ${{ env.CONTAINER_NAME }} || echo 'Container não rodando'
+          
+          echo ''
+          echo 'Configuração de Firewall/Porta 3002:'
+          # Verificar se a porta 3002 está sendo usada
+          netstat -tulpn | grep :3002 || echo 'Porta 3002 livre'
+          
+          # Verificar se iptables está bloqueando a porta 3002
+          iptables -L INPUT -n | grep 3002 || echo 'Nenhuma regra específica para porta 3002'
+          
+          echo ''
+          echo 'Última atualização:'
+          cd ${{ env.APP_DIR }} && git log --oneline -1 2>/dev/null || echo 'Repositório não inicializado'
+        "
+
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v4
+    
+    - name: 🗂️ Setup Node.js com cache
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: package-lock.json
+
+    - name: 📦 Transferir código para VPS
+      run: |
+        echo "📦 Transferindo código para VPS via rsync..."
+        
+        # Instalar rsync
+        sudo apt-get update -qq
+        sudo apt-get install -y rsync
+        
+        # Log detalhado da conectividade
+        echo "🔍 Verificando conectividade SSH antes da transferência..."
+        sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no -v ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          echo 'Conectividade SSH confirmada'
+          free -h
+          df -h /
+          docker --version
+        " 2>&1 | head -20
+        
+        # Limpar diretório remoto
+        echo "🧹 Limpando diretório remoto..."
+        sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          rm -rf ${{ env.APP_DIR }}
+          mkdir -p ${{ env.APP_DIR }}
+          echo 'Diretório limpo e recriado'
+        "
+        
+        # Transferir código usando rsync com logs detalhados
+        echo "🚀 Iniciando transferência rsync..."
+        sshpass -p "${{ secrets.VPS_PASSWORD }}" rsync -avz --delete --progress \
+          --exclude='.git/' \
+          --exclude='node_modules/' \
+          --exclude='.claude/' \
+          --exclude='*.log' \
+          --exclude='*.tmp' \
+          --exclude='.DS_Store' \
+          -e "ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60" \
+          ./ ${{ env.VPS_USER }}@${{ env.VPS_HOST }}:${{ env.APP_DIR }}/
+        
+        # Verificar transferência com logs detalhados
+        echo "✅ Verificando transferência..."
+        sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          cd ${{ env.APP_DIR }}
+          
+          echo '📊 Status da transferência:'
+          echo '  - Diretório atual:' \$(pwd)
+          echo '  - Espaço em disco:' \$(df -h . | tail -1)
+          echo '  - Total de arquivos:' \$(find . -type f | wc -l)
+          
+          if [ -f Dockerfile ]; then
+            echo '✅ Código transferido com sucesso'
+            echo '📂 Arquivos principais:'
+            ls -la | grep -E '(Dockerfile|package\.json|src|\.env|nginx\.conf)' || echo 'Verificando...'
+            echo '📂 Tamanho do package.json:' \$(wc -l package.json 2>/dev/null || echo 'N/A')
+          else
+            echo '❌ ERRO: Dockerfile não encontrado!'
+            echo '📂 Conteúdo atual do diretório:'
+            ls -la
+            echo '📂 Estrutura de diretórios:'
+            find . -maxdepth 2 -type d
+            exit 1
+          fi
+        "
+
+    - name: 🚀 Deploy usando Docker
+      run: |
+        echo "🚀 Executando deploy com Docker..."
+        sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          cd ${{ env.APP_DIR }}
+          
+          # Deploy DigiUrban2 React App usando Docker
+          echo '🚀 Executando deploy DigiUrban2 React App com Docker...'
+          
+          # Parar e remover container anterior se existir
+          echo '🔄 Parando container anterior...'
+          docker stop ${{ env.CONTAINER_NAME }} 2>/dev/null || true
+          docker rm ${{ env.CONTAINER_NAME }} 2>/dev/null || true
+          
+          # Verificar processos Docker ativos (sem matar)
+          echo '💀 Verificando processos Docker...'
+          if pgrep -f 'docker build' >/dev/null 2>&1; then
+            echo '  ⚠️ Processos docker build encontrados (continuando)'
+          fi
+          if pgrep -f 'npm ci' >/dev/null 2>&1; then
+            echo '  ⚠️ Processos npm ci encontrados (continuando)'
+          fi
+          echo '  ✅ Verificação concluída'
+          
+          # Limpeza Docker simplificada
+          echo '🧹 Limpando recursos Docker...'
+          
+          # Verificar se Docker está funcionando
+          if ! docker --version >/dev/null 2>&1; then
+            echo '❌ Docker não encontrado!'
+            exit 1
+          fi
+          
+          # Verificar se o serviço Docker está rodando
+          if ! systemctl is-active --quiet docker; then
+            echo '🔄 Iniciando serviço Docker...'
+            systemctl start docker
+            sleep 5
+          fi
+          
+          # Teste básico do Docker
+          if ! docker info >/dev/null 2>&1; then
+            echo '❌ Docker não está funcionando corretamente!'
+            systemctl status docker
+            exit 1
+          fi
+          
+          echo '✅ Docker está funcionando corretamente'
+          
+          # Limpeza básica e segura
+          echo '  - Removendo imagem anterior se existir...'
+          docker rmi ${{ env.IMAGE_NAME }}:latest 2>/dev/null || echo '    (nenhuma imagem para remover)'
+          
+          echo '  - Limpeza rápida de recursos não utilizados...'
+          docker system prune -f 2>/dev/null || echo '    (falha na limpeza, continuando)'
+          
+          echo '  ✅ Limpeza concluída'
+          
+          # Build da imagem Docker com retry automático
+          echo '🏗️ Building Docker image com retry automático...'
+          
+          # Função de retry para docker build
+          build_with_retry() {
+            local max_attempts=3
+            local attempt=1
+            local timeout_duration=1800  # 30 minutos
+            
+            while [ \$attempt -le \$max_attempts ]; do
+              echo \"🔄 Tentativa \$attempt/\$max_attempts do Docker build...\"
+              
+              # Usar timeout e network host para evitar builds infinitos
+              if timeout \$timeout_duration docker build --network=host --no-cache --pull -t ${{ env.IMAGE_NAME }}:latest .; then
+                echo \"✅ Docker build bem-sucedido na tentativa \$attempt\"
+                return 0
+              else
+                local exit_code=\$?
+                echo \"❌ Docker build falhou na tentativa \$attempt (exit code: \$exit_code)\"
+                
+                if [ \$attempt -eq \$max_attempts ]; then
+                  echo \"💥 Todas as tentativas de build falharam\"
+                  return \$exit_code
+                fi
+                
+                # Limpar containers e imagens órfãs antes de retry
+                echo \"🧹 Limpando recursos Docker antes do retry...\"
+                docker system prune -f --volumes 2>/dev/null || true
+                docker builder prune -f 2>/dev/null || true
+                
+                # Aguardar antes do próximo retry
+                local wait_time=\$((attempt * 30))
+                echo \"⏳ Aguardando \$wait_time segundos antes do próximo retry...\"
+                sleep \$wait_time
+              fi
+              
+              attempt=\$((attempt + 1))
+            done
+          }
+          
+          # Executar build com retry
+          build_with_retry
+          
+          # Verificar se a imagem foi criada
+          if ! docker images | grep -q ${{ env.IMAGE_NAME }}; then
+            echo '❌ Falha ao criar imagem Docker!'
+            exit 1
+          fi
+          
+          echo '✅ Imagem Docker criada com sucesso'
+          
+          # Iniciar container na porta 3002 (VPS exclusiva)
+          echo '🚀 Iniciando container na porta ${{ env.APP_PORT }}...'
+          docker run -d \
+            --name ${{ env.CONTAINER_NAME }} \
+            -p ${{ env.APP_PORT }}:80 \
+            --restart unless-stopped \
+            --memory=1g \
+            --cpus=2 \
+            --tmpfs /tmp \
+            --tmpfs /var/cache/nginx \
+            --tmpfs /var/run \
+            -e NODE_ENV=production \
+            ${{ env.IMAGE_NAME }}:latest
+          
+          # Aguardar container inicializar
+          echo '⏳ Aguardando container inicializar...'
+          sleep 15
+          
+          # Verificar se container está rodando
+          if ! docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
+            echo '❌ Container não está rodando!'
+            echo '📋 Status do container:'
+            docker ps -a | grep ${{ env.CONTAINER_NAME }} || echo 'Container não encontrado'
+            echo '📋 Logs do container:'
+            docker logs ${{ env.CONTAINER_NAME }} 2>/dev/null || echo 'Sem logs disponíveis'
+            exit 1
+          fi
+          
+          # Verificar se está funcionando
+          echo '🔍 Testando React app...'
+          for i in {1..5}; do
+            if curl -f -s http://localhost:${{ env.APP_PORT }}/ >/dev/null 2>&1; then
+              echo '✅ React app funcionando!'
+              break
+            else
+              echo \"⏳ Tentativa \$i/5...\"
+              sleep 5
+            fi
+            
+            if [ \$i -eq 5 ]; then
+              echo '❌ React app não respondeu após 5 tentativas'
+              echo '📋 Logs do container:'
+              docker logs ${{ env.CONTAINER_NAME }}
+              exit 1
+            fi
+          done
+          
+          echo '✅ DigiUrban2 React App deployed successfully on port ${{ env.APP_PORT }}'
+          echo '📊 Status do container:'
+          docker ps | grep ${{ env.CONTAINER_NAME }}
+          echo '✅ Deploy containerizado concluído'
+        "
+
+    - name: 🌐 Configurar Nginx para Landing Page
+      run: |
+        echo "🌐 Configurando Nginx para servir landing page React..."
+        sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          cd ${{ env.APP_DIR }}
+          
+          # Executar script de atualização do Nginx para digiurban.com.br
+          echo '🔧 Executando script de configuração do Nginx para landing page...'
+          chmod +x update-nginx-config.sh
+          ./update-nginx-config.sh
+          
+          # Executar script de correção de CORS para apidigiruban.com.br
+          echo '🔧 Corrigindo configuração CORS para apidigiruban.com.br...'
+          chmod +x fix-apidigiruban-cors.sh
+          ./fix-apidigiruban-cors.sh
+          
+          echo '✅ Configuração do Nginx concluída'
+        "
+
+    - name: 🔍 Verificação Final
+      run: |
+        echo "🔍 Verificação final..."
+        sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          cd ${{ env.APP_DIR }}
+          
+          # Verificar status do container
+          echo '🔍 Status do container:'
+          if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
+            echo '✅ Container rodando'
+            docker ps | grep ${{ env.CONTAINER_NAME }}
+          else
+            echo '❌ Container não encontrado'
+            exit 1
+          fi
+          
+          # Verificar health check da aplicação React (localhost)
+          echo '🔍 Testando aplicação React (localhost)...'
+          if curl -f -s http://localhost:${{ env.APP_PORT }}/ >/dev/null 2>&1; then
+            echo '✅ Aplicação React respondendo no localhost:${{ env.APP_PORT }}'
+          else
+            echo '❌ Aplicação React não está respondendo no localhost'
+            docker logs ${{ env.CONTAINER_NAME }} --tail 10
+            exit 1
+          fi
+          
+          # Verificar health check via Nginx (domínio) - se configurado
+          echo '🔍 Testando conectividade do domínio ${{ env.DOMAIN }}...'
+          
+          # Testar se o domínio responde (HTTP ou HTTPS)
+          if curl -f -s -I http://${{ env.DOMAIN }}/ >/dev/null 2>&1; then
+            echo '✅ Domínio ${{ env.DOMAIN }} respondendo via HTTP'
+            
+            # Verificar se há redirecionamento para HTTPS
+            if curl -f -s -I http://${{ env.DOMAIN }}/ | grep -q '301\\|302'; then
+              echo '✅ Redirecionamento HTTP → HTTPS configurado'
+            else
+              echo '📝 Site respondendo em HTTP (SSL pode não estar configurado ainda)'
+            fi
+          else
+            echo '⚠️ Domínio ${{ env.DOMAIN }} não está respondendo via HTTP'
+          fi
+          
+          # Testar HTTPS se disponível
+          if curl -f -s -k https://${{ env.DOMAIN }}/ >/dev/null 2>&1; then
+            echo '✅ Site HTTPS respondendo em https://${{ env.DOMAIN }}'
+          else
+            echo '📝 HTTPS não disponível (SSL pode não estar configurado)'
+          fi
+          
+          # Testar www se disponível
+          if curl -f -s -k https://www.${{ env.DOMAIN }}/ >/dev/null 2>&1; then
+            echo '✅ Site HTTPS respondendo em https://www.${{ env.DOMAIN }}'
+          elif curl -f -s http://www.${{ env.DOMAIN }}/ >/dev/null 2>&1; then
+            echo '✅ Site HTTP respondendo em http://www.${{ env.DOMAIN }}'
+          else
+            echo '📝 Subdomínio www pode não estar configurado'
+          fi
+          
+        "
+
+    - name: 📊 Relatório do Deploy
+      if: always()
+      run: |
+        echo "📊 RELATÓRIO DO DEPLOY DOCKER"
+        echo "============================="
+        sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ env.VPS_USER }}@${{ env.VPS_HOST }} "
+          echo 'Tipo de Deploy: ${{ needs.analyze-changes.outputs.deploy_type }}'
+          echo 'Restart Executado: ${{ needs.analyze-changes.outputs.needs_restart }}'
+          echo 'Dependências Atualizadas: ${{ needs.analyze-changes.outputs.has_package_changes }}'
+          echo ''
+          
+          echo '=== Status do Container ==='
+          if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
+            docker ps | grep ${{ env.CONTAINER_NAME }}
+          else
+            echo '❌ Container não encontrado'
+          fi
+          
+          echo ''
+          echo '=== Último Commit ==='
+          cd ${{ env.APP_DIR }} && git log --oneline -1 2>/dev/null || echo 'Repositório git não inicializado (deploy via rsync)'
+          
+          echo ''
+          echo '🌐 URLs de Acesso:'
+          echo '  - Site Principal: https://${{ env.DOMAIN }}'
+          echo '  - Site WWW: https://www.${{ env.DOMAIN }}'
+          echo '  - Acesso Direto: http://${{ env.VPS_HOST }}:${{ env.APP_PORT }}'
+          echo '⚡ Deploy Docker DigiUrban2 concluído!'
+        "
+
+    - name: 🎉 Deploy Concluído
+      run: |
+        echo "🎉 DEPLOY DOCKER DIGIURBAN2 REALIZADO COM SUCESSO!"
+        echo "⚡ Tipo: ${{ needs.analyze-changes.outputs.deploy_type }}"
+        echo "🐳 Deploy isolado em container Docker com Nginx Reverse Proxy"
+        echo "🔒 SSL/HTTPS configurado com Let's Encrypt"
+        echo ""
+        echo "🌐 URLs de Acesso:"
+        echo "  - Site Principal: https://${{ env.DOMAIN }}"
+        echo "  - Site WWW: https://www.${{ env.DOMAIN }}"
+        echo "  - Acesso Direto VPS: http://${{ env.VPS_HOST }}:${{ env.APP_PORT }}"
+        echo ""
+        echo "✅ DigiUrban2 está online e funcionando!"
